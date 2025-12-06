@@ -21,12 +21,11 @@ def get_video_meta(url):
                 "status": "success",
                 "id": d.get("id"),
                 "title": d.get("title", ""),
-                "cover": d.get("cover"), # Vercel par direct URL chal jata hai
+                "cover": d.get("cover"), 
                 "play_url": d.get("play"),
                 "music_url": d.get("music"),
                 "author_name": d.get("author", {}).get("nickname", "Unknown"),
                 "author_avatar": d.get("author", {}).get("avatar"),
-                "size": d.get("size", 0),
                 "stats": {
                     "views": d.get("play_count", 0),
                     "likes": d.get("digg_count", 0),
@@ -111,7 +110,6 @@ HTML_TEMPLATE = """
                     document.getElementById('videoTitle').innerText = data.title;
                     document.getElementById('author').innerText = data.author_name;
                     
-                    // Direct Proxy Links
                     document.getElementById('btnVideo').href = `/proxy_download?url=${encodeURIComponent(data.play_url)}&name=${data.id}&type=mp4`;
                     document.getElementById('btnAudio').href = `/proxy_download?url=${encodeURIComponent(data.music_url)}&name=${data.id}&type=mp3`;
                     
@@ -161,7 +159,6 @@ def proxy_download():
         return Response(stream_with_context(req.iter_content(chunk_size=4096)), content_type=ct, headers={"Content-Disposition": f"attachment; filename={fname}"})
     except: return "Error", 400
 
-# --- IMPORTANT FOR VERCEL ---
-# Vercel ko app object chahiye hota hai, app.run() nahi
+# Vercel k liye simple run command
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
