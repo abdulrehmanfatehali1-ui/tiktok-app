@@ -1,11 +1,10 @@
 from flask import Flask, render_template_string, request, jsonify, Response, stream_with_context
 import requests
-import datetime
-import math
+import random
 
 app = Flask(__name__)
 
-# --- BACKEND INTELLIGENCE ---
+# --- BACKEND LOGIC ---
 def get_video_data(url):
     try:
         api_url = "https://www.tikwm.com/api/"
@@ -16,571 +15,268 @@ def get_video_data(url):
         
         if data.get("code") == 0:
             d = data["data"]
-            
-            # --- CALCULATIONS ---
-            # 1. Engagement Rate
-            views = d.get("play_count", 1)
-            likes = d.get("digg_count", 0)
-            shares = d.get("share_count", 0)
-            comments = d.get("comment_count", 0)
-            engagement = ((likes + comments + shares) / views) * 100
-            
-            # 2. Viral Score (0-100)
-            viral_score = min(100, (views / 10000) * 5 + (engagement * 2))
-            
-            # 3. Time Parsing
-            ts = d.get("create_time")
-            dt = datetime.datetime.fromtimestamp(ts)
-            
             return {
                 "status": "success",
-                # Media
                 "id": d.get("id"),
-                "play_url": d.get("play"), 
+                "title": d.get("title", ""),
+                # Hum images ko direct nahi bhejenge, balky apny proxy route k zariye bhejenge
+                "cover": d.get("cover"), 
+                "author_avatar": d.get("author", {}).get("avatar"),
+                "play_url": d.get("play"),
                 "music_url": d.get("music"),
-                "cover": d.get("origin_cover"),
-                "dynamic_cover": d.get("cover"),
-                # Author
-                "author": {
-                    "id": d.get("author", {}).get("unique_id"),
-                    "name": d.get("author", {}).get("nickname"),
-                    "avatar": d.get("author", {}).get("avatar"),
-                    "signature": d.get("author", {}).get("signature", "No Bio"),
-                },
-                # Music
-                "music": {
-                    "title": d.get("music_info", {}).get("title"),
-                    "author": d.get("music_info", {}).get("author"),
-                    "cover": d.get("music_info", {}).get("cover"),
-                    "duration": d.get("duration", 0)
-                },
-                # Stats
+                "author_name": d.get("author", {}).get("nickname"),
                 "stats": {
-                    "views": views,
-                    "likes": likes,
-                    "comments": comments,
-                    "shares": shares,
-                    "downloads": d.get("download_count", 0),
-                    "engagement": f"{engagement:.2f}%",
-                    "viral_score": int(viral_score)
-                },
-                # Metadata
-                "meta": {
-                    "title": d.get("title", ""),
-                    "region": d.get("region", "Global"),
-                    "date": dt.strftime('%Y-%m-%d'),
-                    "time": dt.strftime('%H:%M:%S'),
-                    "duration": d.get("duration", 0)
-                },
-                # Raw (for QR)
-                "share_url": url
+                    "views": d.get("play_count", 0),
+                    "likes": d.get("digg_count", 0),
+                    "downloads": d.get("download_count", 0)
+                }
             }
         return {"status": "error"}
     except:
         return {"status": "error"}
 
-# --- UI TEMPLATE ---
+# --- FRONTEND (VIRAL THEME) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-    <title>TikTokWala Ultimate</title>
-    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3046/3046121.png">
+    <title>TikTak - Viral Downloader</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <!-- QR Code Lib -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <meta name="referrer" content="no-referrer"> 
+    <meta name="referrer" content="no-referrer">
     
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Sofia+Sans:wght@300;500;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&display=swap');
         
-        body { 
-            font-family: 'Sofia Sans', sans-serif; 
-            background-color: #121212; 
-            color: #fff; 
-            padding-bottom: 90px;
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #000;
+            background-image: 
+                radial-gradient(circle at 20% 30%, rgba(37, 244, 238, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(254, 44, 85, 0.15) 0%, transparent 40%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        /* TikTok Colors */
-        :root {
-            --tk-cyan: #25F4EE;
-            --tk-pink: #FE2C55;
-            --bg-card: #1E1E1E;
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }
 
-        /* Logo Animation */
-        .glitch-wrapper { position: relative; display: inline-block; }
-        .glitch-text { font-weight: 900; font-size: 24px; position: relative; color: white; }
-        .glitch-text::before, .glitch-text::after {
-            content: attr(data-text); position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        .neon-border {
+            position: relative;
         }
-        .glitch-text::before { left: 2px; text-shadow: -1px 0 var(--tk-pink); clip: rect(24px, 550px, 90px, 0); animation: glitch-anim 3s infinite linear alternate-reverse; }
-        .glitch-text::after { left: -2px; text-shadow: -1px 0 var(--tk-cyan); clip: rect(85px, 550px, 140px, 0); animation: glitch-anim 2.5s infinite linear alternate-reverse; }
-        @keyframes glitch-anim {
-            0% { clip: rect(10px, 9999px, 30px, 0); }
-            20% { clip: rect(30px, 9999px, 80px, 0); }
-            40% { clip: rect(80px, 9999px, 10px, 0); }
-            100% { clip: rect(50px, 9999px, 90px, 0); }
+        .neon-border::after {
+            content: ''; position: absolute; bottom: -2px; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, #25F4EE, #FE2C55);
+            box-shadow: 0 0 10px #FE2C55;
         }
 
-        .card { background: var(--bg-card); border-radius: 12px; border: 1px solid #2f2f2f; }
-        .input-box { background: #2F2F2F; border: none; color: white; outline: none; transition: 0.3s; }
-        .input-box:focus { box-shadow: 0 0 0 2px var(--tk-pink); }
-        
-        .btn-main {
-            background: var(--tk-pink); color: white; font-weight: bold;
-            transition: 0.2s; border-radius: 8px;
+        .btn-download {
+            background: linear-gradient(90deg, #FE2C55, #FF0055);
+            box-shadow: 0 0 15px rgba(254, 44, 85, 0.4);
+            transition: transform 0.2s;
         }
-        .btn-main:active { transform: scale(0.98); }
+        .btn-download:active { transform: scale(0.95); }
 
-        .stat-item { text-align: center; padding: 10px; background: #252525; border-radius: 8px; }
-        
-        /* Bottom Nav */
-        .bottom-nav {
-            position: fixed; bottom: 0; left: 0; width: 100%;
-            background: #000; border-top: 1px solid #333;
-            display: flex; justify-content: space-around; padding: 12px; z-index: 50;
+        .btn-audio {
+            background: linear-gradient(90deg, #25F4EE, #00C2BA);
+            box-shadow: 0 0 15px rgba(37, 244, 238, 0.3);
+            color: black;
         }
-        .nav-icon { color: #666; font-size: 20px; transition: 0.3s; }
-        .nav-icon.active { color: white; transform: translateY(-5px); }
 
-        .tab-content { display: none; }
-        .tab-content.active { display: block; animation: fadeIn 0.3s; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Ticker Animation */
+        .ticker-wrap {
+            position: fixed; bottom: 0; width: 100%; overflow: hidden; height: 30px; background: rgba(0,0,0,0.8);
+            border-top: 1px solid #333; z-index: 50;
+        }
+        .ticker { display: inline-block; white-space: nowrap; animation: ticker 20s infinite linear; }
+        @keyframes ticker { 0% { transform: translate3d(100%, 0, 0); } 100% { transform: translate3d(-100%, 0, 0); } }
 
-        .tag { background: #333; padding: 2px 8px; border-radius: 4px; font-size: 11px; color: var(--tk-cyan); }
+        .loader {
+            border: 3px solid #333; border-top: 3px solid #FE2C55; border-radius: 50%;
+            width: 30px; height: 30px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="p-4 flex flex-col items-center">
+<body class="flex flex-col items-center p-4">
 
-    <!-- HEADER -->
-    <div class="w-full max-w-md flex justify-between items-center mb-6">
-        <div class="glitch-wrapper">
-            <div class="glitch-text" data-text="TikTokWala">TikTokWala</div>
+    <!-- Navbar -->
+    <div class="w-full max-w-md flex justify-between items-center py-4 mb-8">
+        <h1 class="text-3xl font-bold tracking-tighter">
+            Tik<span class="text-[#FE2C55]">Tak</span><span class="text-[#25F4EE]">.</span>
+        </h1>
+        <div class="flex gap-3">
+            <div class="bg-white/10 p-2 rounded-full"><i class="fa-solid fa-fire text-orange-500"></i></div>
+            <div class="bg-white/10 p-2 rounded-full"><i class="fa-solid fa-bolt text-yellow-400"></i></div>
         </div>
-        <div class="text-xs font-mono text-gray-400 bg-gray-800 px-2 py-1 rounded">ULTRA v3.0</div>
     </div>
 
-    <!-- TABS CONTENT CONTAINER -->
+    <!-- Main Container -->
     <div class="w-full max-w-md">
+        
+        <!-- Hero Section -->
+        <div class="text-center mb-8">
+            <h2 class="text-xl font-bold mb-2">Save Videos in <span class="text-[#25F4EE]">Flash Speed</span></h2>
+            <p class="text-xs text-gray-400">No Watermark • HD Quality • MP3 Audio</p>
+        </div>
 
-        <!-- ============ TAB 1: HOME (DOWNLOADER) ============ -->
-        <div id="tab-home" class="tab-content active">
+        <!-- Input Box -->
+        <div class="glass-card p-2 rounded-2xl flex items-center mb-6 relative group">
+            <div class="absolute -inset-0.5 bg-gradient-to-r from-[#25F4EE] to-[#FE2C55] rounded-2xl blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
+            <div class="relative flex-1 bg-black rounded-xl flex items-center overflow-hidden">
+                <i class="fa-solid fa-link text-gray-500 pl-4"></i>
+                <input type="text" id="urlInput" placeholder="Paste TikTok Link..." 
+                    class="w-full bg-transparent p-4 outline-none text-white text-sm placeholder-gray-600">
+            </div>
+            <button onclick="paste()" class="relative ml-2 bg-[#1a1a1a] text-white p-3 rounded-xl hover:bg-[#333]">
+                <i class="fa-regular fa-paste"></i>
+            </button>
+        </div>
+
+        <button onclick="fetchInfo()" id="mainBtn" class="w-full btn-download py-4 rounded-xl font-bold text-lg tracking-wide mb-8 flex items-center justify-center gap-2">
+            <span>DOWNLOAD NOW</span>
+            <i class="fa-solid fa-cloud-arrow-down"></i>
+        </button>
+
+        <!-- Loading -->
+        <div id="loading" class="hidden flex justify-center my-4">
+            <div class="loader"></div>
+        </div>
+
+        <!-- RESULT AREA -->
+        <div id="result" class="hidden animate-fade-in pb-20">
             
-            <!-- Search -->
-            <div class="relative mb-6">
-                <input type="text" id="urlInput" placeholder="Paste link here..." class="w-full input-box p-4 pr-12 rounded-xl text-sm">
-                <button onclick="pasteLink()" class="absolute right-4 top-4 text-gray-400 hover:text-white">
-                    <i class="fa-solid fa-clipboard"></i>
+            <!-- Video Card -->
+            <div class="glass-card rounded-2xl overflow-hidden mb-6">
+                <!-- Image Fix: Using Proxy -->
+                <div class="relative h-64 bg-gray-900">
+                    <img id="thumb" src="" class="w-full h-full object-cover opacity-80">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
+                    
+                    <div class="absolute bottom-4 left-4 right-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <img id="avatar" src="" class="w-8 h-8 rounded-full border border-white">
+                            <span id="author" class="text-sm font-bold text-white shadow-black drop-shadow-md">User</span>
+                        </div>
+                        <p id="title" class="text-xs text-gray-200 line-clamp-2">Title goes here...</p>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-3 border-t border-white/10 divide-x divide-white/10 bg-black/40 backdrop-blur">
+                    <div class="p-3 text-center">
+                        <p class="text-[10px] text-gray-400">VIEWS</p>
+                        <p id="views" class="font-bold text-sm">0</p>
+                    </div>
+                    <div class="p-3 text-center">
+                        <p class="text-[10px] text-gray-400">LIKES</p>
+                        <p id="likes" class="font-bold text-sm">0</p>
+                    </div>
+                    <div class="p-3 text-center">
+                        <p class="text-[10px] text-gray-400">SAVES</p>
+                        <p id="downloads" class="font-bold text-sm">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download Actions -->
+            <div class="space-y-3">
+                <a id="dlVideo" href="#" class="block w-full btn-download py-3.5 rounded-xl text-center font-bold text-sm">
+                    <i class="fa-solid fa-video mr-2"></i> SAVE VIDEO (HD)
+                </a>
+                <a id="dlAudio" href="#" class="block w-full btn-audio py-3.5 rounded-xl text-center font-bold text-sm">
+                    <i class="fa-solid fa-music mr-2"></i> EXTRACT AUDIO
+                </a>
+                <button onclick="location.reload()" class="block w-full bg-gray-800 text-gray-400 py-3 rounded-xl text-center text-xs">
+                    Download Another
                 </button>
             </div>
-            
-            <button onclick="analyze()" id="mainBtn" class="w-full btn-main py-4 text-sm tracking-wide shadow-[0_4px_15px_rgba(254,44,85,0.4)]">
-                GET DATA <i class="fa-solid fa-bolt ml-1"></i>
-            </button>
 
-            <!-- Loading -->
-            <div id="loading" class="hidden flex justify-center py-6">
-                <i class="fa-solid fa-circle-notch fa-spin text-2xl text-[#fe2c55]"></i>
-            </div>
-
-            <!-- RESULT CARD -->
-            <div id="result" class="hidden mt-6 animate-fade-in">
-                
-                <!-- Video Player Preview -->
-                <div class="card p-2 mb-4 relative">
-                    <video id="vidPreview" controls class="w-full rounded-lg bg-black max-h-[400px]" poster=""></video>
-                    <div id="viralBadge" class="absolute top-4 right-4 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded hidden">
-                        <i class="fa-solid fa-fire"></i> TRENDING
-                    </div>
-                </div>
-
-                <!-- Main Info -->
-                <div class="flex items-start justify-between mb-4">
-                    <div>
-                        <h2 id="vTitle" class="font-bold text-sm line-clamp-2 mb-1">Title</h2>
-                        <div class="flex items-center gap-2">
-                            <img id="uAvatar" src="" class="w-5 h-5 rounded-full">
-                            <span id="uName" class="text-xs text-gray-400">User</span>
-                            <span id="vRegion" class="text-[10px] bg-gray-800 px-1 rounded text-gray-500">US</span>
-                        </div>
-                    </div>
-                    <button onclick="downloadAsset('profile')" class="text-xs bg-gray-800 px-2 py-1 rounded hover:bg-gray-700">
-                        <i class="fa-solid fa-user"></i> DP
-                    </button>
-                </div>
-
-                <!-- 4 Major Actions -->
-                <div class="grid grid-cols-2 gap-3 mb-6">
-                    <a id="dlVideo" href="#" class="btn-main py-2 text-center text-xs flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-video"></i> No Watermark
-                    </a>
-                    <a id="dlAudio" href="#" class="bg-gray-700 text-white py-2 rounded-lg text-center text-xs flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-music"></i> Save Audio
-                    </a>
-                    <button onclick="downloadAsset('cover')" class="bg-gray-800 py-2 rounded-lg text-xs">
-                        <i class="fa-solid fa-image"></i> HD Cover
-                    </button>
-                    <button onclick="downloadAsset('dynamic')" class="bg-gray-800 py-2 rounded-lg text-xs">
-                        <i class="fa-solid fa-film"></i> GIF Cover
-                    </button>
-                </div>
-
-                <!-- Music Player -->
-                <div class="card p-3 flex items-center gap-3 mb-6">
-                    <img id="mCover" class="w-10 h-10 rounded bg-gray-800">
-                    <div class="flex-1 overflow-hidden">
-                        <p id="mTitle" class="text-xs font-bold truncate">Sound</p>
-                        <p id="mAuthor" class="text-[10px] text-gray-400">Artist</p>
-                    </div>
-                    <audio id="audioPreview" controls class="h-8 w-24"></audio>
-                </div>
-
-            </div>
         </div>
 
-        <!-- ============ TAB 2: ANALYTICS (DATA) ============ -->
-        <div id="tab-stats" class="tab-content">
-            <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-chart-pie text-[#25f4ee]"></i> Deep Analytics
-            </h2>
-
-            <div id="statsContent" class="hidden">
-                <!-- Score Board -->
-                <div class="card p-4 mb-4 flex justify-between items-center bg-gradient-to-r from-gray-900 to-gray-800">
-                    <div>
-                        <p class="text-xs text-gray-500">VIRAL SCORE</p>
-                        <h3 id="viralScore" class="text-3xl font-black text-[#25f4ee]">0</h3>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-xs text-gray-500">ENGAGEMENT</p>
-                        <h3 id="engRate" class="text-xl font-bold text-white">0%</h3>
-                    </div>
-                </div>
-
-                <!-- Detailed Grid -->
-                <div class="grid grid-cols-3 gap-2 mb-4">
-                    <div class="stat-item">
-                        <i class="fa-solid fa-eye text-gray-400 mb-1"></i>
-                        <p id="sViews" class="text-sm font-bold">0</p>
-                        <p class="text-[10px] text-gray-500">Views</p>
-                    </div>
-                    <div class="stat-item">
-                        <i class="fa-solid fa-heart text-[#fe2c55] mb-1"></i>
-                        <p id="sLikes" class="text-sm font-bold">0</p>
-                        <p class="text-[10px] text-gray-500">Likes</p>
-                    </div>
-                    <div class="stat-item">
-                        <i class="fa-solid fa-share text-blue-400 mb-1"></i>
-                        <p id="sShares" class="text-sm font-bold">0</p>
-                        <p class="text-[10px] text-gray-500">Shares</p>
-                    </div>
-                    <div class="stat-item">
-                        <i class="fa-solid fa-comment text-green-400 mb-1"></i>
-                        <p id="sComments" class="text-sm font-bold">0</p>
-                        <p class="text-[10px] text-gray-500">Comments</p>
-                    </div>
-                    <div class="stat-item">
-                        <i class="fa-solid fa-download text-yellow-400 mb-1"></i>
-                        <p id="sDownloads" class="text-sm font-bold">0</p>
-                        <p class="text-[10px] text-gray-500">Saves</p>
-                    </div>
-                    <div class="stat-item">
-                        <i class="fa-regular fa-clock text-purple-400 mb-1"></i>
-                        <p id="sDuration" class="text-sm font-bold">0s</p>
-                        <p class="text-[10px] text-gray-500">Length</p>
-                    </div>
-                </div>
-
-                <!-- Time Details -->
-                <div class="card p-4">
-                    <div class="flex justify-between border-b border-gray-700 pb-2 mb-2">
-                        <span class="text-xs text-gray-400">Upload Date</span>
-                        <span id="sDate" class="text-xs font-mono">--</span>
-                    </div>
-                    <div class="flex justify-between border-b border-gray-700 pb-2 mb-2">
-                        <span class="text-xs text-gray-400">Upload Time</span>
-                        <span id="sTime" class="text-xs font-mono">--</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-xs text-gray-400">Video ID</span>
-                        <span id="sVidId" class="text-[10px] font-mono">--</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="statsEmpty" class="text-center text-gray-500 py-10 text-xs">
-                Search a video first to see data.
-            </div>
-        </div>
-
-        <!-- ============ TAB 3: TOOLS (SEO) ============ -->
-        <div id="tab-tools" class="tab-content">
-            <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-toolbox text-yellow-500"></i> Smart Tools
-            </h2>
-            
-            <div id="toolsContent" class="hidden space-y-4">
-                
-                <!-- Tool 1: Caption -->
-                <div class="card p-4">
-                    <div class="flex justify-between mb-2">
-                        <h3 class="text-xs font-bold text-gray-400">CAPTION ANALYSIS</h3>
-                        <button onclick="copyText('fullCaption')" class="text-xs text-[#25f4ee]">Copy</button>
-                    </div>
-                    <p id="fullCaption" class="text-xs text-gray-300 leading-relaxed mb-3">...</p>
-                    
-                    <div class="bg-black p-2 rounded flex items-center gap-2">
-                        <span class="text-[10px] text-gray-500">SENTIMENT:</span>
-                        <span id="sentimentBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-700">--</span>
-                    </div>
-                </div>
-
-                <!-- Tool 2: Tags -->
-                <div class="card p-4">
-                    <div class="flex justify-between mb-2">
-                        <h3 class="text-xs font-bold text-gray-400">HASHTAGS <span id="tagCount" class="text-[10px] bg-gray-700 px-1 rounded">0</span></h3>
-                        <button onclick="copyTags()" class="text-xs text-[#25f4ee]">Copy All</button>
-                    </div>
-                    <div id="tagContainer" class="flex flex-wrap gap-2"></div>
-                </div>
-
-                <!-- Tool 3: QR Code -->
-                <div class="card p-4 flex flex-col items-center">
-                    <h3 class="text-xs font-bold text-gray-400 mb-3">SHARE QR CODE</h3>
-                    <div id="qrcode" class="p-2 bg-white rounded"></div>
-                    <button onclick="shareWhatsapp()" class="mt-4 w-full bg-green-600 py-2 rounded text-xs font-bold">
-                        <i class="fa-brands fa-whatsapp"></i> Share Link
-                    </button>
-                </div>
-
-            </div>
-            
-            <div id="toolsEmpty" class="text-center text-gray-500 py-10 text-xs">
-                Search a video first to use tools.
-            </div>
-        </div>
-
-        <!-- ============ TAB 4: HISTORY ============ -->
-        <div id="tab-history" class="tab-content">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-lg font-bold">History</h2>
-                <button onclick="clearHistory()" class="text-xs text-red-500">Clear All</button>
-            </div>
-            <div id="historyList" class="space-y-3"></div>
+        <!-- ERROR MESSAGE -->
+        <div id="errorMsg" class="hidden bg-red-500/20 text-red-200 p-4 rounded-xl text-center text-sm border border-red-500/50">
+            Video not found. Please check the link.
         </div>
 
     </div>
 
-    <!-- BOTTOM NAV -->
-    <div class="bottom-nav">
-        <i onclick="switchTab('tab-home', this)" class="fa-solid fa-house nav-icon active"></i>
-        <i onclick="switchTab('tab-stats', this)" class="fa-solid fa-chart-simple nav-icon"></i>
-        <i onclick="switchTab('tab-tools', this)" class="fa-solid fa-briefcase nav-icon"></i>
-        <i onclick="switchTab('tab-history', this)" class="fa-solid fa-clock-rotate-left nav-icon"></i>
+    <!-- Live Ticker -->
+    <div class="ticker-wrap">
+        <div class="ticker text-xs text-gray-300 py-1.5 font-mono">
+            🔥 User from Pakistan just downloaded "Funny Cat Video" • ⚡ User from Dubai saved "Cricket Highlights" • 🚀 450 People online now • 🎵 "Dil Dil Pakistan" Audio Extracted
+        </div>
     </div>
 
     <script>
-        let currentData = null;
-
-        // --- CORE LOGIC ---
-        function switchTab(id, el) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            document.querySelectorAll('.nav-icon').forEach(i => i.classList.remove('active'));
-            el.classList.add('active');
-        }
-
-        async function pasteLink() {
+        async function paste() {
             try {
-                const text = await navigator.clipboard.readText();
-                document.getElementById('urlInput').value = text;
+                const t = await navigator.clipboard.readText();
+                document.getElementById('urlInput').value = t;
             } catch(e) {}
         }
 
-        function copyText(id) {
-            const txt = document.getElementById(id).innerText;
-            navigator.clipboard.writeText(txt);
-            alert("Copied!");
-        }
+        // Formatter
+        const nF = new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" });
 
-        function copyTags() {
-            if(!currentData) return;
-            const tags = currentData.meta.title.match(/#[\w]+/g) || [];
-            navigator.clipboard.writeText(tags.join(' '));
-            alert("Tags Copied!");
-        }
-
-        function formatNum(num) {
-            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-            if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
-            return num;
-        }
-
-        function shareWhatsapp() {
-            if(!currentData) return;
-            window.open(`https://wa.me/?text=Check this video: ${currentData.share_url}`, '_blank');
-        }
-
-        // --- MAIN ANALYZER ---
-        async function analyze() {
+        async function fetchInfo() {
             const url = document.getElementById('urlInput').value.trim();
-            if(!url) return alert("Please enter a link!");
+            if(!url) return alert("Please enter link!");
 
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('result').classList.add('hidden');
-            
+            // UI Reset
+            const btn = document.getElementById('mainBtn');
+            const loader = document.getElementById('loading');
+            const result = document.getElementById('result');
+            const error = document.getElementById('errorMsg');
+
+            btn.classList.add('hidden');
+            loader.classList.remove('hidden');
+            result.classList.add('hidden');
+            error.classList.add('hidden');
+
             try {
-                const req = await fetch('/api/info', {
+                const res = await fetch('/api/info', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({url})
                 });
-                const data = await req.json();
-                currentData = data;
+                const data = await res.json();
 
                 if(data.status === 'success') {
-                    // 1. POPULATE HOME
-                    document.getElementById('vTitle').innerText = data.meta.title || "No Title";
-                    document.getElementById('uName').innerText = data.author.name;
-                    document.getElementById('uAvatar').src = `/proxy_image?url=${encodeURIComponent(data.author.avatar)}`;
-                    document.getElementById('vRegion').innerText = data.meta.region.toUpperCase();
+                    // IMAGE FIX: Use Local Proxy
+                    document.getElementById('thumb').src = `/proxy_image?url=${encodeURIComponent(data.cover)}`;
+                    document.getElementById('avatar').src = `/proxy_image?url=${encodeURIComponent(data.author_avatar)}`;
                     
-                    document.getElementById('vidPreview').src = `/proxy_download?url=${encodeURIComponent(data.play_url)}&name=${data.id}&type=mp4`;
-                    document.getElementById('vidPreview').poster = `/proxy_image?url=${encodeURIComponent(data.cover)}`;
-
-                    document.getElementById('mTitle').innerText = data.music.title;
-                    document.getElementById('mAuthor').innerText = data.music.author;
-                    document.getElementById('mCover').src = `/proxy_image?url=${encodeURIComponent(data.music.cover)}`;
-                    document.getElementById('audioPreview').src = `/proxy_download?url=${encodeURIComponent(data.music_url)}&name=${data.id}&type=mp3`;
+                    document.getElementById('title').innerText = data.title || "TikTok Video";
+                    document.getElementById('author').innerText = "@" + data.author_name;
+                    
+                    document.getElementById('views').innerText = nF.format(data.stats.views);
+                    document.getElementById('likes').innerText = nF.format(data.stats.likes);
+                    document.getElementById('downloads').innerText = nF.format(data.stats.downloads);
 
                     // Links
                     document.getElementById('dlVideo').href = `/proxy_download?url=${encodeURIComponent(data.play_url)}&name=${data.id}&type=mp4`;
                     document.getElementById('dlAudio').href = `/proxy_download?url=${encodeURIComponent(data.music_url)}&name=${data.id}&type=mp3`;
 
-                    // Badge
-                    if(data.stats.viral_score > 70) {
-                        document.getElementById('viralBadge').classList.remove('hidden');
-                    } else {
-                        document.getElementById('viralBadge').classList.add('hidden');
-                    }
-
-                    // 2. POPULATE STATS
-                    document.getElementById('sViews').innerText = formatNum(data.stats.views);
-                    document.getElementById('sLikes').innerText = formatNum(data.stats.likes);
-                    document.getElementById('sShares').innerText = formatNum(data.stats.shares);
-                    document.getElementById('sComments').innerText = formatNum(data.stats.comments);
-                    document.getElementById('sDownloads').innerText = formatNum(data.stats.downloads);
-                    document.getElementById('sDuration').innerText = data.meta.duration + "s";
-                    
-                    document.getElementById('viralScore').innerText = data.stats.viral_score;
-                    document.getElementById('engRate').innerText = data.stats.engagement;
-                    
-                    document.getElementById('sDate').innerText = data.meta.date;
-                    document.getElementById('sTime').innerText = data.meta.time;
-                    document.getElementById('sVidId').innerText = data.id;
-
-                    document.getElementById('statsContent').classList.remove('hidden');
-                    document.getElementById('statsEmpty').classList.add('hidden');
-
-                    // 3. POPULATE TOOLS
-                    document.getElementById('fullCaption').innerText = data.meta.title;
-                    
-                    // Basic Sentiment
-                    const titleLower = data.meta.title.toLowerCase();
-                    let mood = "Neutral";
-                    if(titleLower.includes('sad') || titleLower.includes('cry') || titleLower.includes('miss')) mood = "Sad 😔";
-                    else if(titleLower.includes('happy') || titleLower.includes('fun') || titleLower.includes('love')) mood = "Happy 😊";
-                    else if(titleLower.includes('lol') || titleLower.includes('funny')) mood = "Funny 😂";
-                    
-                    const badge = document.getElementById('sentimentBadge');
-                    badge.innerText = mood;
-                    badge.className = "text-[10px] font-bold px-2 py-0.5 rounded " + (mood.includes('Sad') ? "bg-blue-900 text-blue-300" : mood.includes('Happy') ? "bg-green-900 text-green-300" : "bg-gray-700");
-
-                    // Hashtags
-                    const tags = data.meta.title.match(/#[\w]+/g) || [];
-                    document.getElementById('tagCount').innerText = tags.length;
-                    document.getElementById('tagContainer').innerHTML = tags.length ? 
-                        tags.map(t => `<span class="tag">${t}</span>`).join('') : 
-                        '<span class="text-xs text-gray-600">No tags</span>';
-
-                    // QR Code
-                    document.getElementById('qrcode').innerHTML = "";
-                    new QRCode(document.getElementById("qrcode"), {
-                        text: data.share_url,
-                        width: 100,
-                        height: 100
-                    });
-
-                    document.getElementById('toolsContent').classList.remove('hidden');
-                    document.getElementById('toolsEmpty').classList.add('hidden');
-
-                    // 4. HISTORY
-                    addToHistory(data);
-
-                    document.getElementById('result').classList.remove('hidden');
+                    result.classList.remove('hidden');
                 } else {
-                    alert("Not Found");
+                    error.classList.remove('hidden');
+                    btn.classList.remove('hidden');
                 }
             } catch(e) {
-                console.error(e);
-                alert("Error");
+                error.classList.remove('hidden');
+                btn.classList.remove('hidden');
             } finally {
-                document.getElementById('loading').classList.add('hidden');
+                loader.classList.add('hidden');
             }
         }
-
-        // --- ASSET DOWNLOADER ---
-        function downloadAsset(type) {
-            if(!currentData) return;
-            let u = "";
-            if(type === 'profile') u = currentData.author.avatar;
-            if(type === 'cover') u = currentData.cover;
-            if(type === 'dynamic') u = currentData.dynamic_cover;
-            if(u) window.open(u, '_blank');
-        }
-
-        // --- HISTORY ---
-        function addToHistory(data) {
-            let h = JSON.parse(localStorage.getItem('tkHistory') || '[]');
-            if(!h.find(x => x.id === data.id)) {
-                h.unshift({
-                    id: data.id,
-                    title: data.meta.title,
-                    cover: data.cover,
-                    time: new Date().toLocaleTimeString()
-                });
-                if(h.length > 10) h.pop();
-                localStorage.setItem('tkHistory', JSON.stringify(h));
-                renderHistory();
-            }
-        }
-
-        function renderHistory() {
-            const h = JSON.parse(localStorage.getItem('tkHistory') || '[]');
-            const list = document.getElementById('historyList');
-            if(h.length === 0) list.innerHTML = '<p class="text-xs text-gray-500 text-center mt-10">No history yet.</p>';
-            else {
-                list.innerHTML = h.map(item => `
-                    <div class="card p-2 flex gap-3 items-center">
-                        <img src="/proxy_image?url=${encodeURIComponent(item.cover)}" class="w-10 h-10 rounded object-cover">
-                        <div class="overflow-hidden flex-1">
-                            <p class="text-xs font-bold truncate">${item.title || 'Video'}</p>
-                            <p class="text-[10px] text-gray-500">${item.time}</p>
-                        </div>
-                    </div>
-                `).join('');
-            }
-        }
-        function clearHistory() {
-            localStorage.removeItem('tkHistory');
-            renderHistory();
-        }
-        renderHistory();
-
     </script>
 </body>
 </html>
@@ -597,23 +293,30 @@ def api_info():
     result = get_video_data(data.get('url'))
     return jsonify(result)
 
+# --- IMAGE PROXY (THE FIX FOR BROKEN IMAGES) ---
 @app.route('/proxy_image')
 def proxy_image():
     url = request.args.get('url')
     if not url: return "", 404
+    # Fix: Ensure url is complete
     if not url.startswith('http'): url = "https://www.tikwm.com" + url
+    
     try:
+        # Stream image to bypass referrer checks
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         return Response(r.content, mimetype="image/jpeg")
-    except: return "", 404
+    except:
+        return "", 404
 
+# --- VIDEO/AUDIO PROXY ---
 @app.route('/proxy_download')
 def proxy_download():
     url = request.args.get('url')
-    name = request.args.get('name', 'file')
+    name = request.args.get('name', 'TikTak_Video')
     type_ = request.args.get('type', 'mp4')
     if not url: return "No URL", 400
     if not url.startswith('http'): url = "https://www.tikwm.com" + url
+    
     try:
         r = requests.get(url, stream=True, headers={"User-Agent": "Mozilla/5.0"})
         ct = "video/mp4" if type_ == 'mp4' else "audio/mpeg"
@@ -623,4 +326,3 @@ def proxy_download():
 
 if __name__ == '__main__':
     app.run()
-
