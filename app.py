@@ -2,10 +2,12 @@ from flask import Flask, render_template_string, request, jsonify, Response, str
 import requests
 import random
 import time
+import datetime
 
 app = Flask(__name__)
+app.secret_key = "super_secret_key_tiktok_pro"
 
-# --- Backend Logic ---
+# --- Backend Logic (Downloader) ---
 def get_video_meta(url):
     try:
         api_url = "https://www.tikwm.com/api/"
@@ -23,7 +25,6 @@ def get_video_meta(url):
                 "play_url": d.get("play"),
                 "music_url": d.get("music"),
                 "author_name": d.get("author", {}).get("nickname", "Unknown"),
-                "author_avatar": d.get("author", {}).get("avatar"),
                 "stats": {
                     "views": d.get("play_count", 0),
                     "likes": d.get("digg_count", 0)
@@ -33,363 +34,344 @@ def get_video_meta(url):
     except:
         return {"status": "error"}
 
-# --- Generating Viral Hashtags ---
-def get_viral_hashtags():
-    tags = [
-        "#foryou", "#foryoupage", "#fyp", "#duet", "#tiktok", "#viral", 
-        "#tiktokindia", "#trending", "#comedy", "#funny", "#tiktokpakistan", 
-        "#illu", "#standwithkashmir", "#burhan_tv", "#goviral", "#explore"
-    ]
-    random.shuffle(tags)
-    return " ".join(tags[:10]) # Return top 10 random tags
-
-# --- Frontend Template (Modern Dashboard) ---
+# --- UI Template (Cyberpunk Dashboard) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TikTok Wala - Super Tool</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>TikTok GOD MODE</title>
     <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3046/3046121.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <meta name="referrer" content="no-referrer"> 
+    
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap');
         
         body { 
-            font-family: 'Outfit', sans-serif; 
-            background-color: #0f172a; 
-            color: white; 
+            font-family: 'Rajdhani', sans-serif; 
+            background-color: #050505; 
+            color: #00ff9d; 
             min-height: 100vh;
-            padding-bottom: 80px; /* Space for bottom nav */
+            overflow-x: hidden;
         }
 
-        .glass-panel { 
-            background: rgba(30, 41, 59, 0.8); 
-            backdrop-filter: blur(15px); 
-            border: 1px solid rgba(255, 255, 255, 0.08); 
+        /* Cyberpunk Grid Background */
+        .cyber-bg {
+            background-image: linear-gradient(rgba(0, 255, 157, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 255, 157, 0.05) 1px, transparent 1px);
+            background-size: 30px 30px;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
         }
 
-        .btn-gradient { 
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%); 
-        }
-        
-        .btn-gold {
-            background: linear-gradient(135deg, #FFD700 0%, #FDB931 100%);
-            color: black;
-        }
-
-        /* Bottom Navigation */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: rgba(15, 23, 42, 0.95);
+        .glass-box {
+            background: rgba(10, 20, 15, 0.8);
+            border: 1px solid #00ff9d;
+            box-shadow: 0 0 15px rgba(0, 255, 157, 0.2);
             backdrop-filter: blur(10px);
-            border-top: 1px solid rgba(255,255,255,0.1);
-            display: flex;
-            justify-content: space-around;
-            padding: 12px 0;
-            z-index: 50;
         }
-        
-        .nav-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            font-size: 10px;
-            color: #64748b;
-            transition: all 0.3s;
-        }
-        
-        .nav-item.active {
-            color: #ec4899;
-            transform: translateY(-2px);
-        }
-        
-        .nav-item i { font-size: 18px; margin-bottom: 4px; }
 
-        .loader { border: 3px solid rgba(255,255,255,0.1); border-left-color: #ec4899; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .neon-text { text-shadow: 0 0 10px rgba(0, 255, 157, 0.7); }
+        .neon-btn {
+            background: #00ff9d; color: black; font-weight: bold; text-transform: uppercase;
+            box-shadow: 0 0 20px rgba(0, 255, 157, 0.4); transition: 0.3s;
+        }
+        .neon-btn:hover { box-shadow: 0 0 40px rgba(0, 255, 157, 0.8); transform: scale(1.02); }
+
+        .input-cyber {
+            background: black; border: 1px solid #333; color: white;
+            font-family: 'Courier New', monospace;
+        }
+        .input-cyber:focus { border-color: #00ff9d; outline: none; }
+
+        /* Console Animation */
+        .console-log {
+            font-family: 'Courier New', monospace; font-size: 10px; color: #00ff9d;
+            height: 150px; overflow-y: auto; background: black; border: 1px solid #333;
+            padding: 10px; opacity: 0.8;
+        }
         
-        .tab-content { display: none; }
-        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .hidden { display: none; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Progress Bar */
+        .progress-container { width: 100%; background: #222; height: 10px; border-radius: 5px; margin-top: 10px; overflow: hidden; }
+        .progress-bar { height: 100%; background: #00ff9d; width: 0%; transition: width 0.2s; box-shadow: 0 0 10px #00ff9d; }
     </style>
 </head>
-<body class="p-4">
+<body class="flex items-center justify-center p-4">
 
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-2">
-            <img src="https://cdn-icons-png.flaticon.com/512/3046/3046121.png" class="w-8 h-8">
-            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-purple-500">TikTok Wala</h1>
+    <div class="cyber-bg"></div>
+
+    <!-- ================= AUTH SCREEN (Login/Signup) ================= -->
+    <div id="authScreen" class="w-full max-w-sm glass-box p-8 rounded-none relative fade-in">
+        <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-black px-4 text-[#00ff9d] border border-[#00ff9d] text-xs font-bold tracking-widest">
+            SECURE ACCESS
         </div>
-        <div id="userStatus" class="text-xs bg-slate-800 px-3 py-1 rounded-full border border-white/10 text-slate-300">
-            Free Plan
+        
+        <div class="text-center mb-8">
+            <i class="fa-solid fa-user-secret text-5xl mb-2 neon-text"></i>
+            <h1 class="text-3xl font-bold tracking-wider">TIKTOK GOD</h1>
+            <p class="text-xs text-gray-500">SYSTEM V.9.0 // READY</p>
+        </div>
+
+        <div id="loginForm">
+            <input type="text" id="l_user" placeholder="USERNAME" class="w-full input-cyber p-3 mb-4 text-sm">
+            <input type="password" id="l_pass" placeholder="PASSWORD" class="w-full input-cyber p-3 mb-6 text-sm">
+            <button onclick="handleLogin()" class="w-full neon-btn p-3 tracking-widest mb-4">LOGIN SYSTEM</button>
+            <p class="text-center text-xs cursor-pointer hover:text-white" onclick="toggleAuth()">Create New Account</p>
+        </div>
+
+        <div id="signupForm" class="hidden">
+            <input type="text" id="s_user" placeholder="SET USERNAME" class="w-full input-cyber p-3 mb-4 text-sm">
+            <input type="password" id="s_pass" placeholder="SET PASSWORD" class="w-full input-cyber p-3 mb-6 text-sm">
+            <button onclick="handleSignup()" class="w-full neon-btn p-3 tracking-widest mb-4">REGISTER ID</button>
+            <p class="text-center text-xs cursor-pointer hover:text-white" onclick="toggleAuth()">Back to Login</p>
         </div>
     </div>
 
-    <!-- ================= TAB 1: DOWNLOADER ================= -->
-    <div id="tab-home" class="tab-content active">
-        <div class="glass-panel p-6 rounded-3xl mb-4">
-            <h2 class="text-lg font-bold mb-4">Video Downloader</h2>
-            <input type="text" id="urlInput" placeholder="Paste TikTok Link..." class="w-full bg-slate-900 p-4 rounded-xl text-white text-sm outline-none border border-slate-700 mb-4 focus:border-pink-500 transition">
-            <button onclick="fetchInfo()" id="searchBtn" class="w-full btn-gradient py-3.5 rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2">
-                <i class="fa-solid fa-cloud-arrow-down"></i> Download
-            </button>
-            <div id="dl-result" class="hidden mt-6 bg-slate-800/50 p-4 rounded-2xl border border-white/5">
-                <!-- Result injected via JS -->
+    <!-- ================= DASHBOARD SCREEN ================= -->
+    <div id="dashboard" class="w-full max-w-md hidden fade-in">
+        
+        <!-- Top Bar -->
+        <div class="glass-box p-3 mb-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 bg-[#00ff9d] rounded-full animate-pulse"></div>
+                <span class="text-xs font-bold" id="displayUser">USER</span>
             </div>
+            <button onclick="logout()" class="text-xs bg-red-900/50 text-red-400 px-2 py-1 border border-red-500 hover:bg-red-500 hover:text-black transition">LOGOUT</button>
         </div>
-    </div>
 
-    <!-- ================= TAB 2: VIEWS & LIKES ================= -->
-    <div id="tab-views" class="tab-content">
-        <div class="glass-panel p-6 rounded-3xl mb-4 relative overflow-hidden">
-            <div class="absolute top-0 right-0 bg-yellow-500 text-black text-[10px] font-bold px-2 py-1 rounded-bl-lg">HOT</div>
-            <h2 class="text-lg font-bold mb-2">Get Views & Likes</h2>
-            <p class="text-xs text-slate-400 mb-4">Boost your video instantly.</p>
+        <!-- MAIN TOOLS -->
+        <div class="glass-box p-6 relative mb-4">
+            <h2 class="text-xl font-bold mb-4 border-b border-[#00ff9d]/30 pb-2">TOOLKIT MENU</h2>
             
-            <div class="bg-slate-900/50 p-3 rounded-xl mb-4 border border-white/5">
-                <div class="flex justify-between text-xs mb-1">
-                    <span class="text-slate-400">Daily Limit:</span>
-                    <span id="viewLimit" class="font-bold text-pink-500">1000</span>
-                </div>
-                <div class="w-full bg-slate-700 h-1.5 rounded-full">
-                    <div id="limitBar" class="bg-pink-500 h-1.5 rounded-full" style="width: 100%"></div>
-                </div>
-            </div>
-
-            <input type="text" id="viewUrl" placeholder="Video Link for Views..." class="w-full bg-slate-900 p-3 rounded-xl text-sm mb-3 outline-none border border-slate-700">
-            <button onclick="sendViews()" id="viewBtn" class="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold text-sm transition">
-                🚀 Send 1000 Views (Free)
-            </button>
-            
-            <div id="viewMsg" class="mt-3 text-xs text-center hidden"></div>
-
-            <!-- Premium Upsell -->
-            <div class="mt-6 border-t border-white/10 pt-4 text-center">
-                <p class="text-sm font-semibold text-yellow-400 mb-2">Want 3000+ Views?</p>
-                <button onclick="switchTab('tab-premium')" class="btn-gold px-6 py-2 rounded-full text-xs font-bold shadow-lg shadow-yellow-500/20">
-                    Get Premium Plan
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="showSection('sec-download')" class="border border-[#00ff9d]/50 p-4 hover:bg-[#00ff9d]/10 transition text-center group">
+                    <i class="fa-solid fa-download text-2xl mb-2 group-hover:scale-110 transition"></i>
+                    <p class="text-xs font-bold">DOWNLOADER</p>
+                </button>
+                <button onclick="showSection('sec-booster')" class="border border-[#00ff9d]/50 p-4 hover:bg-[#00ff9d]/10 transition text-center group">
+                    <i class="fa-solid fa-rocket text-2xl mb-2 group-hover:scale-110 transition text-pink-500"></i>
+                    <p class="text-xs font-bold text-pink-500">VIEW BOOSTER</p>
+                </button>
+                <button onclick="showSection('sec-premium')" class="col-span-2 border border-yellow-500/50 p-3 hover:bg-yellow-500/10 transition text-center group">
+                    <i class="fa-solid fa-crown text-yellow-500"></i>
+                    <span class="text-xs font-bold text-yellow-500 ml-2">BUY PREMIUM ACCESS</span>
                 </button>
             </div>
         </div>
-    </div>
 
-    <!-- ================= TAB 3: TOOLS (Unfreeze/Hash) ================= -->
-    <div id="tab-tools" class="tab-content">
-        <!-- Hashtag Generator -->
-        <div class="glass-panel p-5 rounded-3xl mb-4">
-            <div class="flex items-center gap-2 mb-3">
-                <i class="fa-solid fa-hashtag text-pink-500"></i>
-                <h2 class="text-base font-bold">Viral Hashtags</h2>
+        <!-- SECTION: DOWNLOADER -->
+        <div id="sec-download" class="glass-box p-6 hidden relative">
+            <button onclick="showSection('main')" class="absolute top-2 right-2 text-xs text-gray-500">[X]</button>
+            <h3 class="font-bold mb-4 text-[#00ff9d]">>> VIDEO EXTRACTOR</h3>
+            <input type="text" id="dlUrl" placeholder="PASTE LINK..." class="w-full input-cyber p-3 mb-3 text-sm">
+            <button onclick="fetchVideo()" id="dlBtn" class="w-full border border-[#00ff9d] text-[#00ff9d] p-2 hover:bg-[#00ff9d] hover:text-black transition font-bold text-sm">EXTRACT DATA</button>
+            
+            <div id="dlResult" class="hidden mt-4 border-t border-gray-800 pt-4">
+                <!-- Result here -->
             </div>
-            <div id="hashResult" class="bg-slate-900 p-3 rounded-xl text-xs text-slate-300 mb-3 min-h-[50px]">
-                Click generate to get tags...
-            </div>
-            <button onclick="getHashtags()" class="w-full bg-slate-700 py-2 rounded-lg text-xs font-bold">Generate</button>
         </div>
 
-        <!-- Unfreeze Account -->
-        <div class="glass-panel p-5 rounded-3xl">
-            <div class="flex items-center gap-2 mb-3">
-                <i class="fa-solid fa-snowflake text-cyan-400"></i>
-                <h2 class="text-base font-bold">Unfreeze Account</h2>
+        <!-- SECTION: VIEW BOOSTER (THE MAIN FEATURE) -->
+        <div id="sec-booster" class="glass-box p-6 hidden relative">
+            <button onclick="showSection('main')" class="absolute top-2 right-2 text-xs text-gray-500">[X]</button>
+            <h3 class="font-bold mb-2 text-pink-500">>> 1000 VIEWS INJECTOR</h3>
+            <p class="text-[10px] text-gray-400 mb-4">STATUS: <span class="text-green-500">ONLINE</span> | SPEED: <span class="text-red-500">TURBO</span></p>
+
+            <input type="text" id="boostUrl" placeholder="VIDEO URL FOR VIEWS..." class="w-full input-cyber p-3 mb-3 text-sm border-pink-500/50 focus:border-pink-500">
+            
+            <div id="consoleBox" class="console-log hidden mb-3"></div>
+            
+            <div id="progressArea" class="hidden mb-3">
+                <div class="flex justify-between text-[10px] mb-1">
+                    <span>INJECTING VIEWS...</span>
+                    <span id="viewCount">0 / 1000</span>
+                </div>
+                <div class="progress-container">
+                    <div id="boostBar" class="progress-bar"></div>
+                </div>
             </div>
-            <input type="text" id="username" placeholder="@username" class="w-full bg-slate-900 p-2 rounded-lg text-xs mb-2 border border-slate-700">
-            <button onclick="unfreeze()" class="w-full bg-cyan-600 hover:bg-cyan-700 py-2 rounded-lg text-xs font-bold">Generate Appeal</button>
-            <textarea id="appealBox" class="w-full bg-slate-900 p-2 rounded-lg text-[10px] mt-2 hidden h-24 text-slate-300" readonly></textarea>
+
+            <button onclick="startBoost()" id="boostBtn" class="w-full bg-pink-600 text-white p-3 font-bold text-sm hover:bg-pink-700 transition shadow-[0_0_15px_rgba(236,72,153,0.5)]">
+                INITIATE ATTACK (1000 VIEWS)
+            </button>
         </div>
-    </div>
 
-    <!-- ================= TAB 4: PREMIUM (JazzCash) ================= -->
-    <div id="tab-premium" class="tab-content">
-        <div class="glass-panel p-6 rounded-3xl border border-yellow-500/30 relative overflow-hidden">
-            <div class="absolute inset-0 bg-yellow-500/5 z-0"></div>
-            <div class="relative z-10 text-center">
-                <i class="fa-solid fa-crown text-4xl text-yellow-400 mb-2"></i>
-                <h2 class="text-xl font-bold text-white">Premium Plan</h2>
-                <p class="text-sm text-slate-400 mb-6">Unlock 3000 Views + Fast Servers</p>
-
-                <div class="bg-slate-900/80 p-4 rounded-xl text-left mb-4 border border-white/10">
-                    <p class="text-xs text-slate-400">Price:</p>
-                    <p class="text-xl font-bold text-white">Rs. 150 <span class="text-xs font-normal text-slate-500">/ Lifetime</span></p>
-                    <hr class="border-white/10 my-2">
-                    <p class="text-xs text-slate-400">JazzCash Number:</p>
-                    <div class="flex justify-between items-center">
-                        <p class="text-lg font-mono text-yellow-400 font-bold">03076485837</p>
-                        <button onclick="navigator.clipboard.writeText('03076485837'); alert('Copied!')" class="text-slate-500 hover:text-white"><i class="fa-regular fa-copy"></i></button>
-                    </div>
+        <!-- SECTION: PREMIUM -->
+        <div id="sec-premium" class="glass-box p-6 hidden relative border-yellow-500/30">
+            <button onclick="showSection('main')" class="absolute top-2 right-2 text-xs text-gray-500">[X]</button>
+            <div class="text-center">
+                <i class="fa-solid fa-gem text-4xl text-yellow-400 mb-2 animate-bounce"></i>
+                <h3 class="text-xl font-bold text-white">LIFETIME ACCESS</h3>
+                <p class="text-xs text-gray-400 mb-4">Unlimited Views + API Access</p>
+                
+                <div class="bg-black/50 p-4 border border-yellow-500/20 mb-4">
+                    <p class="text-sm text-gray-400">JAZZCASH NUMBER:</p>
+                    <p class="text-2xl font-mono font-bold text-yellow-400 tracking-wider">03076485827</p>
+                    <p class="text-xs mt-2 text-green-400">PRICE: RS. 150 ONLY</p>
                 </div>
 
-                <div class="space-y-2">
-                    <input type="text" id="senderNum" placeholder="Your JazzCash Number" class="w-full bg-slate-900 p-3 rounded-lg text-xs border border-slate-700">
-                    <input type="text" id="trxId" placeholder="Trx ID (Transaction ID)" class="w-full bg-slate-900 p-3 rounded-lg text-xs border border-slate-700">
-                    <button onclick="submitPayment()" class="w-full btn-gold py-3 rounded-lg font-bold text-sm shadow-lg">
-                        Submit for Verification
-                    </button>
-                </div>
-                <p id="payMsg" class="text-[10px] text-green-400 mt-2 hidden"></p>
+                <input type="text" placeholder="SENDER NUMBER" class="w-full input-cyber p-2 mb-2 text-xs">
+                <input type="text" placeholder="TRX ID" class="w-full input-cyber p-2 mb-3 text-xs">
+                <button onclick="alert('Request Sent to Admin! Wait for approval.')" class="w-full bg-yellow-600 text-black font-bold p-2 hover:bg-yellow-500">SUBMIT</button>
             </div>
         </div>
-    </div>
 
-    <!-- Bottom Navigation -->
-    <div class="bottom-nav">
-        <div class="nav-item active" onclick="switchTab('tab-home', this)">
-            <i class="fa-solid fa-home"></i> Home
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-views', this)">
-            <i class="fa-solid fa-fire"></i> Views
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-tools', this)">
-            <i class="fa-solid fa-toolbox"></i> Tools
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-premium', this)">
-            <i class="fa-solid fa-crown text-yellow-500"></i> Premium
-        </div>
     </div>
 
     <script>
-        // --- Tab Switching Logic ---
-        function switchTab(tabId, navElement) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            // Show selected tab
-            document.getElementById(tabId).classList.add('active');
+        // --- AUTH LOGIC (LocalStorage Mock DB) ---
+        function checkLogin() {
+            const user = localStorage.getItem('tiktokUser');
+            if (user) {
+                document.getElementById('authScreen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                document.getElementById('displayUser').innerText = user.toUpperCase();
+            }
+        }
+        checkLogin();
+
+        function toggleAuth() {
+            document.getElementById('loginForm').classList.toggle('hidden');
+            document.getElementById('signupForm').classList.toggle('hidden');
+        }
+
+        function handleSignup() {
+            const u = document.getElementById('s_user').value;
+            const p = document.getElementById('s_pass').value;
+            if(!u || !p) return alert("ENTER CREDENTIALS");
             
-            // Update Nav Icons
-            if(navElement) {
-                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-                navElement.classList.add('active');
+            localStorage.setItem('tiktokUser', u);
+            localStorage.setItem('tiktokPass', p);
+            alert("REGISTRATION SUCCESSFUL. PLEASE LOGIN.");
+            toggleAuth();
+        }
+
+        function handleLogin() {
+            const u = document.getElementById('l_user').value;
+            const p = document.getElementById('l_pass').value;
+            const savedU = localStorage.getItem('tiktokUser');
+            const savedP = localStorage.getItem('tiktokPass');
+
+            if(u === savedU && p === savedP) {
+                checkLogin();
+            } else {
+                alert("ACCESS DENIED: WRONG CREDENTIALS");
             }
         }
 
-        // --- Downloader Logic ---
-        async function fetchInfo() {
-            const url = document.getElementById('urlInput').value.trim();
-            const resDiv = document.getElementById('dl-result');
-            const btn = document.getElementById('searchBtn');
+        function logout() {
+            localStorage.removeItem('tiktokUser'); // Note: For this demo we logout fully
+            location.reload();
+        }
 
-            if(!url) return alert("Please paste a link!");
+        // --- DASHBOARD NAVIGATION ---
+        function showSection(id) {
+            document.getElementById('sec-download').classList.add('hidden');
+            document.getElementById('sec-booster').classList.add('hidden');
+            document.getElementById('sec-premium').classList.add('hidden');
             
-            btn.innerHTML = '<div class="loader"></div>';
-            resDiv.classList.add('hidden');
+            if(id !== 'main') {
+                document.getElementById(id).classList.remove('hidden');
+            }
+        }
 
+        // --- 1000 VIEWS BOOSTER LOGIC (Simulation) ---
+        function startBoost() {
+            const url = document.getElementById('boostUrl').value;
+            if(!url) return alert("NO TARGET DETECTED");
+
+            const btn = document.getElementById('boostBtn');
+            const consoleBox = document.getElementById('consoleBox');
+            const progressArea = document.getElementById('progressArea');
+            const bar = document.getElementById('boostBar');
+            const count = document.getElementById('viewCount');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            consoleBox.classList.remove('hidden');
+            progressArea.classList.remove('hidden');
+            consoleBox.innerHTML = "> CONNECTING TO SERVER...<br>";
+
+            let progress = 0;
+            let views = 0;
+            
+            // This interval runs for exactly 60 seconds approx (simulated)
+            const interval = setInterval(() => {
+                progress += 1.6; // Increment progress
+                views += 17; // Increment views
+                
+                if (progress > 100) progress = 100;
+                if (views > 1000) views = 1000;
+
+                bar.style.width = progress + "%";
+                count.innerText = Math.floor(views) + " / 1000";
+
+                // Add random logs
+                if(Math.random() > 0.7) {
+                    const logs = [
+                        "> PACKET SENT [OK]", 
+                        "> BYPASSING FIREWALL...", 
+                        "> INJECTING 50 VIEWS...", 
+                        "> SERVER RESPONSE: 200 OK"
+                    ];
+                    consoleBox.innerHTML += logs[Math.floor(Math.random() * logs.length)] + "<br>";
+                    consoleBox.scrollTop = consoleBox.scrollHeight;
+                }
+
+                if (views >= 1000) {
+                    clearInterval(interval);
+                    consoleBox.innerHTML += "> <span style='color:#00ff9d'>TASK COMPLETED SUCCESSFULLY.</span>";
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50');
+                    btn.innerText = "SEND MORE VIEWS";
+                    alert("SUCCESS: 1000 VIEWS DELIVERED!");
+                }
+            }, 1000); // Updates every second for 60 seconds
+        }
+
+        // --- DOWNLOADER LOGIC ---
+        async function fetchVideo() {
+            const url = document.getElementById('dlUrl').value;
+            const btn = document.getElementById('dlBtn');
+            const resDiv = document.getElementById('dlResult');
+
+            if(!url) return;
+            btn.innerText = "PROCESSING...";
+            
             try {
-                const res = await fetch('/api/info', {
+                const req = await fetch('/api/info', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({url})
                 });
-                const data = await res.json();
+                const data = await req.json();
                 
                 if(data.status === 'success') {
                     resDiv.innerHTML = `
-                        <div class="flex gap-3 mb-3">
-                            <img src="${data.cover}" class="w-16 h-20 object-cover rounded-lg bg-slate-900">
+                        <div class="flex gap-3 mb-2">
+                            <img src="${data.cover}" class="w-16 h-20 object-cover border border-[#00ff9d]">
                             <div>
-                                <h3 class="text-xs font-bold line-clamp-2">${data.title || 'Video'}</h3>
-                                <p class="text-[10px] text-slate-400 mt-1">${data.author_name}</p>
+                                <p class="text-xs font-bold line-clamp-2">${data.title}</p>
+                                <p class="text-[10px] text-gray-500 mt-1">@${data.author_name}</p>
                             </div>
                         </div>
-                        <a href="/proxy_download?url=${encodeURIComponent(data.play_url)}&name=${data.id}&type=mp4" class="btn-gradient w-full block text-center py-2 rounded-lg text-xs font-bold mb-2">Download Video</a>
-                        <a href="/proxy_download?url=${encodeURIComponent(data.music_url)}&name=${data.id}&type=mp3" class="bg-slate-700 w-full block text-center py-2 rounded-lg text-xs">Download Audio</a>
+                        <a href="/proxy_download?url=${encodeURIComponent(data.play_url)}&name=${data.id}&type=mp4" class="block w-full bg-[#00ff9d] text-black text-center text-xs font-bold py-2 hover:bg-white transition">DOWNLOAD VIDEO</a>
                     `;
                     resDiv.classList.remove('hidden');
                 } else {
-                    alert("Video not found!");
+                    alert("ERROR: INVALID LINK");
                 }
             } catch(e) {
-                alert("Error connecting to server");
+                alert("SERVER ERROR");
             } finally {
-                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> Download';
+                btn.innerText = "EXTRACT DATA";
             }
         }
-
-        // --- Views Logic (Simulated) ---
-        function sendViews() {
-            const url = document.getElementById('viewUrl').value;
-            const btn = document.getElementById('viewBtn');
-            const msg = document.getElementById('viewMsg');
-            
-            // Check Local Storage Limit
-            let viewsUsed = localStorage.getItem('viewsToday') || 0;
-            if(viewsUsed >= 1000) {
-                alert("Daily Free Limit (1000) Reached! Upgrade to Premium.");
-                return;
-            }
-
-            if(!url) return alert("Paste video link first!");
-
-            btn.disabled = true;
-            btn.innerText = "Sending Views...";
-            
-            // Simulate API Call delay
-            setTimeout(() => {
-                let sent = Math.floor(Math.random() * 50) + 100; // Random 100-150 views
-                let newTotal = parseInt(viewsUsed) + sent;
-                
-                if(newTotal > 1000) newTotal = 1000;
-                localStorage.setItem('viewsToday', newTotal);
-
-                // Update UI
-                updateLimitBar();
-                
-                msg.innerText = `Success! ${sent} views sent. (It may take 10-30 mins to reflect)`;
-                msg.classList.remove('hidden');
-                msg.className = "mt-3 text-xs text-center text-green-400";
-                
-                btn.disabled = false;
-                btn.innerText = "🚀 Send More Views";
-            }, 2000);
-        }
-
-        function updateLimitBar() {
-            let used = localStorage.getItem('viewsToday') || 0;
-            let percent = (used / 1000) * 100;
-            document.getElementById('limitBar').style.width = (100 - percent) + "%";
-            document.getElementById('viewLimit').innerText = (1000 - used);
-        }
-        updateLimitBar(); // Init
-
-        // --- Hashtag Logic ---
-        async function getHashtags() {
-            const box = document.getElementById('hashResult');
-            box.innerText = "Generating...";
-            const res = await fetch('/api/hashtags');
-            const data = await res.json();
-            box.innerText = data.tags;
-        }
-
-        // --- Unfreeze Logic ---
-        function unfreeze() {
-            const user = document.getElementById('username').value;
-            if(!user) return alert("Enter username!");
-            const text = `Hello TikTok Team,\n\nMy account ${user} has been frozen mistakenly. I follow all community guidelines. Please review my account and unfreeze it as soon as possible. I am a content creator and this is affecting my reach.\n\nThank you.`;
-            const box = document.getElementById('appealBox');
-            box.value = text;
-            box.classList.remove('hidden');
-        }
-
-        // --- Payment Logic ---
-        function submitPayment() {
-            const trx = document.getElementById('trxId').value;
-            const num = document.getElementById('senderNum').value;
-            if(!trx || !num) return alert("Fill all details!");
-            
-            document.getElementById('payMsg').innerText = "Request Sent! Admin will verify TRX: " + trx + " within 24 hours.";
-            document.getElementById('payMsg').classList.remove('hidden');
-            
-            // In a real app, send this to database. 
-            // Here we just simulate success for the user.
-        }
-
     </script>
 </body>
 </html>
@@ -406,13 +388,8 @@ def api_info():
     result = get_video_meta(data.get('url'))
     return jsonify(result)
 
-@app.route('/api/hashtags')
-def api_tags():
-    return jsonify({"tags": get_viral_hashtags()})
-
 @app.route('/proxy_download')
 def proxy_download():
-    # ... (Same proxy logic as before) ...
     file_url = request.args.get('url')
     file_id = request.args.get('name', 'tiktok')
     file_type = request.args.get('type', 'mp4')
